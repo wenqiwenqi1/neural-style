@@ -34,8 +34,8 @@ def imread(path):   #读取图片
         img = img[:,:,:3]
     return img
 
-content='examples/beili.jpg'
-styles=['examples/1-style.jpg']
+content='examples/beili.jpg'    #此处为内容图片路径，可修改
+styles=['examples/1-style.jpg']    #此处为风格图片路径，可修改
 
 content_image = imread(content)  #读取content图片
 style_images = [imread(style) for style in styles]   #读取style图片，可以有多个
