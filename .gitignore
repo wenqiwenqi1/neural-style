@@ -3,4 +3,3 @@ env/
 .idea
 __pycache__
 *.pyc
-*.jpg
