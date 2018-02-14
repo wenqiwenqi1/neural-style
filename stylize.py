@@ -1,5 +1,3 @@
-# Copyright (c) 2015-2017 Anish Athalye. Released under GPLv3.
-
 import vgg
 
 import tensorflow as tf
