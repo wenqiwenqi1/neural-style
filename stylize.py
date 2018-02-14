@@ -33,8 +33,8 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
     """
     shape = (1,) + content.shape   #若content.shape=(356, 600, 3)  shape=(356, 600, 3, 1)
     style_shapes = [(1,) + style.shape for style in styles]
-    content_features = {}
-    style_features = [{} for _ in styles]     #创建风格特征字典
+    content_features = {}                 #创建内容features map
+    style_features = [{} for _ in styles]     #创建风格features map
 
     vgg_weights, vgg_mean_pixel = vgg.load_net(network)  #加载预训练模型，得到weights和mean_pixel
 
@@ -42,7 +42,8 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
     style_layers_weights = {}
     for style_layer in STYLE_LAYERS:
         style_layers_weights[style_layer] = layer_weight
-        layer_weight *= style_layer_weight_exp     #style_layers_weights指数增长，style_layer_weight_exp默认为1不增长
+        layer_weight *= style_layer_weight_exp     #若有设置style_layer_weight_exp，则style_layers_weights指数增长，
+                                                   # style_layer_weight_exp默认为1不增长
 
     # normalize style layer weights
     layer_weights_sum = 0
@@ -57,28 +58,23 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
     g = tf.Graph()
     with g.as_default(), g.device('/cpu:0'), tf.Session() as sess:   #计算content features
         image = tf.placeholder('float', shape=shape)
-        net = vgg.net_preloaded(vgg_weights, image, pooling)        #所有网络在此构建，net为字典，包含所有层
+        net = vgg.net_preloaded(vgg_weights, image, pooling)        #所有网络在此构建，net为content的features maps
         content_pre = np.array([vgg.preprocess(content, vgg_mean_pixel)])  #content - vgg_mean_pixel
         for layer in CONTENT_LAYERS:
             content_features[layer] = net[layer].eval(feed_dict={image: content_pre}) #content_features取值
             # print(layer,content_features[layer].shape)
 
     # compute style features in feedforward mode
-    for i in range(len(styles)):                     #计算syle features
+    for i in range(len(styles)):                     #计算style features
         g = tf.Graph()
         with g.as_default(), g.device('/cpu:0'), tf.Session() as sess:
             image = tf.placeholder('float', shape=style_shapes[i])
             net = vgg.net_preloaded(vgg_weights, image, pooling)       #pooling 默认为MAX
-            style_pre = np.array([vgg.preprocess(styles[i], vgg_mean_pixel)])
+            style_pre = np.array([vgg.preprocess(styles[i], vgg_mean_pixel)])  #styles[i]-vgg_mean_pixel
             for layer in STYLE_LAYERS:
                 features = net[layer].eval(feed_dict={image: style_pre})
-                # print(features, "features")
-                # print(features.shape,'style')
                 features = np.reshape(features, (-1, features.shape[3]))   #根据通道数目reshape
-                print(features.shape)
-                print(features.size)
-                print(features.T.shape)
-                gram = np.matmul(features.T, features) / features.size
+                gram = np.matmul(features.T, features) / features.size  #gram矩阵
                 style_features[i][layer] = gram
 
     initial_content_noise_coeff = 1.0 - initial_noiseblend
@@ -87,7 +83,7 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
     with tf.Graph().as_default():
         if initial is None:
             noise = np.random.normal(size=shape, scale=np.std(content) * 0.1)
-            initial = tf.random_normal(shape) * 0.256
+            initial = tf.random_normal(shape) * 0.256            #初始化图片
         else:
             initial = np.array([vgg.preprocess(initial, vgg_mean_pixel)])
             initial = initial.astype('float32')
@@ -98,19 +94,19 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
         image = tf.Variable(initial)初始化了一个TensorFlow的变量，即为我们需要训练的对象。
         注意这里我们训练的对象是一张图像，而不是weight和bias。
         '''
-        net = vgg.net_preloaded(vgg_weights, image, pooling)
+        net = vgg.net_preloaded(vgg_weights, image, pooling)   #此处的net为生成图片的features map
 
         # content loss
         content_layers_weights = {}
         content_layers_weights['relu4_2'] = content_weight_blend      #内容图片 content weight blend, conv4_2 * blend + conv5_2 * (1-blend)
-        content_layers_weights['relu5_2'] = 1.0 - content_weight_blend
+        content_layers_weights['relu5_2'] = 1.0 - content_weight_blend  #content weight blend默认为1，即只用conv4_2层
 
         content_loss = 0
         content_losses = []
         for content_layer in CONTENT_LAYERS:
             content_losses.append(content_layers_weights[content_layer] * content_weight * (2 * tf.nn.l2_loss(
-                    net[content_layer] - content_features[content_layer]) /
-                    content_features[content_layer].size))
+                    net[content_layer] - content_features[content_layer]) /         #生成图片-内容图片
+                    content_features[content_layer].size))     # tf.nn.l2_loss：output = sum(t ** 2) / 2
         content_loss += reduce(tf.add, content_losses)
 
         # style loss
@@ -127,7 +123,7 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
                 _, height, width, number = map(lambda i: i.value, layer.get_shape())
                 size = height * width * number
                 feats = tf.reshape(layer, (-1, number))
-                gram = tf.matmul(tf.transpose(feats), feats) / size   #求得gram矩阵，即style矩阵
+                gram = tf.matmul(tf.transpose(feats), feats) / size   #求得生成图片的gram矩阵
                 style_gram = style_features[i][style_layer]
                 style_losses.append(style_layers_weights[style_layer] * 2 * tf.nn.l2_loss(gram - style_gram) / style_gram.size)
             style_loss += style_weight * style_blend_weights[i] * reduce(tf.add, style_losses)

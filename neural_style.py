@@ -133,7 +133,7 @@ def main():
         style_images[i] = scipy.misc.imresize(style_images[i], style_scale *
                 target_shape[1] / style_images[i].shape[1])
 
-    style_blend_weights = options.style_blend_weights   #获取风格图片集的权重，即分配是否更看重某种风格图
+    style_blend_weights = options.style_blend_weights   #获取风格图片集的权重，即分配是否更看重某张风格图
     if style_blend_weights is None:
         # default is equal weights
         style_blend_weights = [1.0/len(style_images) for _ in style_images] #若用户未输入，则平均分配
@@ -185,7 +185,7 @@ def main():
         combined_rgb = image
         if iteration is not None:
             if options.checkpoint_output:
-                output_file = options.checkpoint_output % iteration   #每一个迭代保存一次图片
+                output_file = options.checkpoint_output % iteration   #在此迭代中保存一次图片
         else:
             output_file = options.output
         if output_file:
